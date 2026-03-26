@@ -1,192 +1,230 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Habit Ledger</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { margin:0; font-family:'Segoe UI',sans-serif; background:linear-gradient(135deg,#020617,#0f172a); color:white; padding:20px; }
-    .container { max-width:500px; margin:auto; }
-    h1 { text-align:center; margin-bottom:5px; }
-    .subtitle { text-align:center; opacity:0.6; margin-bottom:20px; }
-    .glass { background:rgba(255,255,255,0.05); backdrop-filter:blur(10px); padding:12px; border-radius:12px; margin-bottom:15px; }
-    input,select,button { padding:10px; border-radius:8px; border:none; margin:5px; }
-    button { cursor:pointer; }
-    .primary { background:#2563eb; color:white; }
-    .done { background:#16a34a; color:white; }
-    .fail { background:#dc2626; color:white; }
-    .secondary { background:#475569; color:white; }
-    .danger { background:#b91c1c; color:white; }
-    .card { background:rgba(255,255,255,0.06); border-radius:14px; padding:15px; margin-bottom:12px; }
-    .hidden { display:none; }
-    .history span { margin-right:4px; font-size:18px; }
-  </style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Habit Ledger</title>
+
+<style>
+body{font-family:sans-serif;background:#020617;color:white;padding:20px}
+.container{max-width:800px;margin:auto}
+.card{background:#0f172a;padding:12px;border-radius:10px;margin-bottom:12px}
+button,input,select{margin:4px;padding:6px 10px;border:none;border-radius:6px}
+button{cursor:pointer}
+.primary{background:#2563eb;color:white}
+.done{background:#16a34a;color:white}
+.fail{background:#dc2626;color:white}
+.danger{background:#b91c1c;color:white}
+.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
+.day{padding:8px;text-align:center;background:#1e293b;border-radius:6px;cursor:pointer}
+.green{background:#16a34a}
+.red{background:#dc2626}
+.hidden{display:none}
+.glass{background:rgba(255,255,255,0.05);padding:10px;border-radius:10px;margin-bottom:10px}
+</style>
+
 </head>
+
 <body>
+
 <div class="container">
-  <h1>📊 Habit Ledger</h1>
-  <div class="subtitle">Discipline • Consistency • Growth</div>
+<h2>📊 Habit Ledger</h2>
 
-  <button class="primary" onclick="toggleAdd()">+ Add Habit</button>
+<button class="primary" onclick="toggleAdd()">+ Add Habit</button>
 
-  <div id="addBox" class="glass hidden">
-    <input id="name" placeholder="Habit name">
-    <select id="type">
-      <option value="good">Constructive</option>
-      <option value="bad">Destructive</option>
-    </select>
-    <button class="primary" onclick="addHabit()">Save</button>
-  </div>
+<div id="addBox" class="glass hidden">
+<input id="name" placeholder="Habit name">
+<select id="type">
+<option value="good">Constructive</option>
+<option value="bad">Destructive</option>
+</select>
+<button onclick="addHabit()">Save</button>
+</div>
 
-  <div class="glass">
-    <button class="secondary" onclick="exportData()">⬇ Export</button>
-    <input type="file" id="importFile" style="display:none" onchange="importData(event)">
-    <button class="secondary" onclick="document.getElementById('importFile').click()">⬆ Import</button>
-    <button class="danger" onclick="clearData()">🗑 Clear</button>
-  </div>
+<div class="glass">
+<select id="filter" onchange="render()">
+<option value="7">Last 7 days</option>
+<option value="30">Last 30 days</option>
+<option value="90">Last 3 months</option>
+<option value="180">Last 6 months</option>
+<option value="365">Last year</option>
+</select>
+</div>
 
-  <div class="glass">
-    <select id="range" onchange="render()">
-      <option value="7">Last 7 days</option>
-      <option value="thisMonth">This Month</option>
-      <option value="lastMonth">Last Month</option>
-      <option value="3">Last 3 Months</option>
-      <option value="6">Last 6 Months</option>
-      <option value="thisYear">This Year</option>
-      <option value="lastYear">Last Year</option>
-    </select>
-    <input type="date" id="date" onchange="render()">
-  </div>
+<div id="list"></div>
 
-  <div id="list"></div>
 </div>
 
 <script>
 let habits = JSON.parse(localStorage.getItem("habits")) || [];
-const today = new Date();
-const dateInput = document.getElementById("date");
-dateInput.valueAsDate = today;
-dateInput.max = today.toISOString().split("T")[0];
+let current = new Date();
 
-function toggleAdd(){ document.getElementById("addBox").classList.toggle("hidden"); }
+function save(){
+  localStorage.setItem("habits",JSON.stringify(habits));
+  render();
+}
 
-function save(){ localStorage.setItem("habits", JSON.stringify(habits)); render(); }
+function toggleAdd(){
+  document.getElementById("addBox").classList.toggle("hidden");
+}
 
 function addHabit(){
-  const name = document.getElementById("name").value;
-  const type = document.getElementById("type").value;
+  const name=document.getElementById("name").value;
+  const type=document.getElementById("type").value;
   if(!name) return;
-  habits.push({ name, type, history: [] });
+
+  habits.push({name,type,history:[],showCal:false});
   document.getElementById("name").value="";
   toggleAdd();
   save();
 }
 
-function mark(i, done){
-  const date = new Date(dateInput.value).toDateString();
-  habits[i].history = habits[i].history.filter(h=>h.date!==date);
-  habits[i].history.push({date, done});
+function markToday(i,done){
+  const today=new Date().toDateString();
+  habits[i].history = habits[i].history.filter(h=>h.date!==today);
+  habits[i].history.push({date:today,done});
   save();
 }
 
-function exportData(){
-  const blob = new Blob([JSON.stringify(habits)], {type:"application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "habit-ledger-backup.json";
-  a.click();
-}
-
-function importData(e){
-  const reader = new FileReader();
-  reader.onload = () => { habits = JSON.parse(reader.result); save(); };
-  reader.readAsText(e.target.files[0]);
-}
-
-function clearData(){
-  if(confirm("Are you sure you want to delete all data?")){
-    localStorage.removeItem("habits");
-    habits = [];
-    render();
-  }
-}
-
-function getRangeDates(){
-  const selected = new Date(dateInput.value);
-  const range = document.getElementById("range").value;
-  let dates = [];
-  function pushRange(start, end){
-    let d = new Date(end);
-    while(d >= start){
-      dates.push(new Date(d).toDateString());
-      d.setDate(d.getDate()-1);
-    }
-  }
-  if(range==="7"){
-    for(let i=0;i<7;i++){ let d=new Date(selected); d.setDate(d.getDate()-i); dates.push(d.toDateString()); }
-  }
-  else if(range==="thisMonth"){
-    pushRange(new Date(selected.getFullYear(), selected.getMonth(), 1), selected);
-  }
-  else if(range==="lastMonth"){
-    pushRange(new Date(selected.getFullYear(), selected.getMonth()-1, 1), new Date(selected.getFullYear(), selected.getMonth(), 0));
-  }
-  else if(range==="3" || range==="6"){
-    let start=new Date(selected); start.setMonth(start.getMonth()-parseInt(range));
-    pushRange(start, selected);
-  }
-  else if(range==="thisYear"){
-    pushRange(new Date(selected.getFullYear(),0,1), selected);
-  }
-  else if(range==="lastYear"){
-    pushRange(new Date(selected.getFullYear()-1,0,1), new Date(selected.getFullYear()-1,11,31));
-  }
-  return dates;
-}
-
+// ✅ Correct streak logic (continuous days only)
 function streak(h){
   let s=0;
-  const sorted=[...h.history].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  for(let e of sorted){
+  let entries=[...h.history].map(e=>({...e,d:new Date(e.date)})).sort((a,b)=>b.d-a.d);
+
+  let currentDate=new Date();
+  currentDate.setHours(0,0,0,0);
+
+  for(let e of entries){
+    let d=new Date(e.d);
+    d.setHours(0,0,0,0);
+
+    if(d.getTime()!==currentDate.getTime()) break;
+
     if(h.type==="good" && e.done) s++;
     else if(h.type==="bad" && !e.done) s++;
     else break;
+
+    currentDate.setDate(currentDate.getDate()-1);
   }
   return s;
 }
 
-function total(h){
-  return h.type==="good"
-    ? h.history.filter(x=>x.done).length
-    : h.history.filter(x=>!x.done).length;
+// ✅ Filter count
+function totalFiltered(h){
+  let days=parseInt(document.getElementById("filter").value);
+  let now=new Date();
+  let start=new Date();
+  start.setDate(now.getDate()-days);
+
+  return h.history.filter(e=>{
+    let d=new Date(e.date);
+    if(d<start) return false;
+    return h.type==="good" ? e.done : !e.done;
+  }).length;
 }
 
-function status(h,d){
-  const e=h.history.find(x=>x.date===d);
-  if(!e) return "⬜";
+function toggleCalendar(i){
+  habits[i].showCal=!habits[i].showCal;
+  save();
+}
+
+function toggleDay(i,date){
+  let h=habits[i];
+  let e=h.history.find(x=>x.date===date);
+
+  if(e){ e.done=!e.done; }
+  else{ h.history.push({date,done:true}); }
+
+  save();
+}
+
+function getStatus(h,date){
+  let e=h.history.find(x=>x.date===date);
+  if(!e) return "";
+
   return h.type==="good"
-    ? (e.done?"🟢":"🔴")
-    : (e.done?"🔴":"🟢");
+    ? (e.done?"green":"red")
+    : (e.done?"red":"green");
+}
+
+function changeMonth(offset){
+  current.setMonth(current.getMonth()+offset);
+  render();
 }
 
 function render(){
-  const dates = getRangeDates();
   const list=document.getElementById("list");
   list.innerHTML="";
+
   habits.forEach((h,i)=>{
-    const div=document.createElement("div");
+    let div=document.createElement("div");
     div.className="card";
-    let historyRow = dates.map(d=>`<span>${status(h,d)}</span>`).join("");
+
+    let calendar="";
+    if(h.showCal){
+      let y=current.getFullYear();
+      let m=current.getMonth();
+      let days=new Date(y,m+1,0).getDate();
+
+      calendar=`
+      <div>
+        <button onclick="changeMonth(-1)">◀</button>
+        ${current.toLocaleString('default',{month:'long',year:'numeric'})}
+        <button onclick="changeMonth(1)">▶</button>
+      </div>`;
+
+      calendar+='<div class="calendar">';
+      for(let d=1;d<=days;d++){
+        let date=new Date(y,m,d).toDateString();
+        let cls=getStatus(h,date);
+
+        calendar+=`
+        <div class="day ${cls}" onclick="toggleDay(${i},'${date}')">
+          ${d}
+        </div>`;
+      }
+      calendar+='</div>';
+    }
+
     div.innerHTML=`
-      <b>${h.name}</b><br>
-      🔥 Streak: ${streak(h)} | 📊 ${total(h)} days
-      <div class="history">${historyRow}</div>
-      <button class="done" onclick="mark(${i},true)">Done</button>
-      <button class="fail" onclick="mark(${i},false)">Not Done</button>
+    <b>${h.name}</b><br>
+    🔥 Streak: ${streak(h)} | 📊 Filter Count: ${totalFiltered(h)}<br>
+
+    <button class="done" onclick="markToday(${i},true)">Done Today</button>
+    <button class="fail" onclick="markToday(${i},false)">Not Done</button>
+
+    <button onclick="toggleCalendar(${i})">📅 Calendar</button>
+    <button onclick="editHabit(${i})">Edit</button>
+    <button onclick="deleteHabit(${i})" class="danger">Delete</button>
+    <button onclick="clearHabitData(${i})" class="danger">Clear Data</button>
+
+    ${calendar}
     `;
+
     list.appendChild(div);
   });
 }
+
+function editHabit(i){
+  let n=prompt("Edit name",habits[i].name);
+  if(n){ habits[i].name=n; save(); }
+}
+
+function deleteHabit(i){
+  if(confirm("Delete habit?")){
+    habits.splice(i,1);
+    save();
+  }
+}
+
+function clearHabitData(i){
+  if(confirm("Clear all data for this habit?")){
+    habits[i].history=[];
+    save();
+  }
+}
+
 render();
 </script>
+
 </body>
 </html>
